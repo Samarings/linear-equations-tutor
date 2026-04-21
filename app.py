@@ -143,6 +143,14 @@ section[data-testid="stSidebar"] {
     background: #EEF1EC;
     border-right: 1px solid var(--lt-soft);
 }
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"] * {
+    color: var(--lt-primary) !important;
+}
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] code {
+    color: var(--lt-primary) !important;
+    background: rgba(47, 72, 88, 0.08) !important;
+}
 
 /* Tabs */
 .stTabs [role="tablist"] button {
