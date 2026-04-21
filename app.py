@@ -44,6 +44,7 @@ from typing import Any, Dict, List
 import pandas as pd
 import streamlit as st
 
+import db
 from content import TOPICS, generate_problem, get_explanation
 from ml_model import (
     CLASS_LABELS,
@@ -259,6 +260,120 @@ init_state()
 
 
 # ---------------------------------------------------------------------------
+# Cloud sync helpers (no-ops if Supabase isn't configured or user not signed in)
+# ---------------------------------------------------------------------------
+
+PERSIST_KEYS = (
+    "attempt_history",
+    "total_attempts",
+    "correct_attempts",
+    "incorrect_attempts",
+    "hint_count",
+    "response_times",
+    "mastery_prediction",
+    "mastery_probs",
+)
+
+
+def _current_user_id() -> str:
+    u = db.current_user()
+    return u["id"] if u else ""
+
+
+def hydrate_from_cloud() -> None:
+    """Load a signed-in user's saved progress into session_state once per session."""
+    if st.session_state.get("_hydrated"):
+        return
+    uid = _current_user_id()
+    if not uid:
+        return
+    row = db.load_progress(uid)
+    for k in PERSIST_KEYS:
+        if k in row:
+            st.session_state[k] = row[k]
+    st.session_state["_hydrated"] = True
+
+
+def sync_to_cloud() -> None:
+    """Upsert current progress to Supabase. Silent on failure."""
+    uid = _current_user_id()
+    if not uid:
+        return
+    payload = {k: st.session_state.get(k) for k in PERSIST_KEYS}
+    db.save_progress(uid, payload)
+
+
+# ---------------------------------------------------------------------------
+# Auth gate — shown before the main app when Supabase is configured
+# ---------------------------------------------------------------------------
+
+def render_auth_gate() -> None:
+    """Show a sign-in / sign-up form. Called only when no user is signed in."""
+    st.markdown(
+        """
+        <div class="hero">
+          <h1>Linear Equations Tutor</h1>
+          <p>Create a free account to save your mastery progress and problem history across sessions.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    left, mid, right = st.columns([1, 2, 1])
+    with mid:
+        tab_in, tab_up = st.tabs(["Sign in", "Create account"])
+
+        with tab_in:
+            with st.form("signin_form", clear_on_submit=False):
+                email = st.text_input("Email", key="signin_email")
+                password = st.text_input("Password", type="password", key="signin_pw")
+                submitted = st.form_submit_button("Sign in", use_container_width=True)
+            if submitted:
+                if not email or not password:
+                    st.error("Enter your email and password.")
+                else:
+                    ok, msg = db.sign_in(email.strip(), password)
+                    if ok:
+                        st.session_state.pop("_hydrated", None)
+                        st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
+        with tab_up:
+            with st.form("signup_form", clear_on_submit=False):
+                email_u = st.text_input("Email", key="signup_email")
+                name_u = st.text_input("Display name (optional)", key="signup_name")
+                password_u = st.text_input(
+                    "Password (6+ characters)", type="password", key="signup_pw"
+                )
+                submitted_u = st.form_submit_button(
+                    "Create account", use_container_width=True
+                )
+            if submitted_u:
+                if not email_u or not password_u:
+                    st.error("Email and password are required.")
+                elif len(password_u) < 6:
+                    st.error("Password must be at least 6 characters.")
+                else:
+                    ok, msg = db.sign_up(
+                        email_u.strip(), password_u, name_u.strip()
+                    )
+                    if ok:
+                        st.session_state.pop("_hydrated", None)
+                        st.success(msg)
+                        if db.current_user():
+                            st.rerun()
+                    else:
+                        st.error(msg)
+
+        st.caption(
+            "Your email is only used to sign you in and sync your progress. "
+            "Nothing is shared."
+        )
+
+
+# ---------------------------------------------------------------------------
 # Model (cached)
 # ---------------------------------------------------------------------------
 
@@ -320,6 +435,7 @@ def record_attempt(correct: bool) -> None:
     else:
         st.session_state["incorrect_attempts"] += 1
     refresh_mastery()
+    sync_to_cloud()
 
 
 def reveal_hint() -> None:
@@ -330,12 +446,32 @@ def reveal_hint() -> None:
         st.session_state["hints_revealed"] += 1
         st.session_state["hint_count"] += 1
         refresh_mastery()
+        sync_to_cloud()
 
 
 def reset_session() -> None:
+    # Preserve auth keys so a reset doesn't sign the user out.
+    keep = {k: st.session_state[k] for k in (
+        "_supabase_client", "_supabase_session", "_supabase_user", "_hydrated"
+    ) if k in st.session_state}
     for k, v in DEFAULT_STATE.items():
         st.session_state[k] = v
     st.session_state["answer_input_key"] += 1
+    for k, v in keep.items():
+        st.session_state[k] = v
+    sync_to_cloud()  # persist the reset so it sticks across devices
+
+
+# ---------------------------------------------------------------------------
+# Auth gate — runs before anything else when Supabase is configured
+# ---------------------------------------------------------------------------
+
+if db.is_enabled() and db.current_user() is None:
+    render_auth_gate()
+    st.stop()
+
+# Once signed in (or if auth isn't configured), pull saved progress in.
+hydrate_from_cloud()
 
 
 # ---------------------------------------------------------------------------
@@ -354,7 +490,18 @@ with st.sidebar:
 
     st.divider()
 
-    st.divider()
+    # Account panel — only shown when Supabase is configured.
+    _user = db.current_user()
+    if _user is not None:
+        _name = _user.get("display_name") or _user.get("email") or "Student"
+        st.markdown(f"**Signed in as**")
+        st.markdown(f"{_name}")
+        if st.button("Sign out", use_container_width=True):
+            db.sign_out()
+            st.session_state.pop("_hydrated", None)
+            st.rerun()
+        st.divider()
+
     if st.button("🔄 Reset Session", use_container_width=True):
         reset_session()
         st.rerun()
