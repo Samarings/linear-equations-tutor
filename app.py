@@ -354,14 +354,6 @@ with st.sidebar:
 
     st.divider()
 
-    api_ok = get_api_key() is not None
-    if api_ok:
-        st.success("Perplexity API: connected", icon="✅")
-    else:
-        st.info("Running in offline mode (local content only).", icon="🧭")
-
-    st.caption("Add `PERPLEXITY_API_KEY` in Streamlit secrets to unlock AI tutor replies.")
-
     st.divider()
     if st.button("🔄 Reset Session", use_container_width=True):
         reset_session()
