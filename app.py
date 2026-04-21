@@ -167,10 +167,18 @@ section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] code {
     color: #2F4858 !important;
     background: rgba(47, 72, 88, 0.08) !important;
 }
-/* Keep the primary button text white on the dark button */
+/* Sidebar buttons: white surface with dark text so the label stays visible */
 section[data-testid="stSidebar"] .stButton > button,
+section[data-testid="stSidebar"] .stButton > button:hover,
+section[data-testid="stSidebar"] .stButton > button:focus,
+section[data-testid="stSidebar"] .stButton > button:active,
 section[data-testid="stSidebar"] .stButton > button * {
-    color: #FFFFFF !important;
+    background: #FFFFFF !important;
+    color: #2F4858 !important;
+    border: 1px solid #CBD2D9 !important;
+}
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: #F3F4F6 !important;
 }
 
 /* Tabs */
