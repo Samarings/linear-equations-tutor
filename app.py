@@ -573,9 +573,8 @@ def page_ask() -> None:
     with st.container(border=True):
         st.subheader("Ask a question")
         st.caption(
-            "Ask anything about slope, y-intercept, graphing, or word problems. "
-            "When an API key is set, the tutor uses Perplexity. Otherwise, you'll get a "
-            "local summary from the built-in lessons."
+            "Ask anything about slope, y-intercept, graphing, or word problems "
+            "and the tutor will walk you through it step by step."
         )
 
         question = st.text_area(
@@ -625,9 +624,9 @@ def page_ask() -> None:
         if reply:
             source = st.session_state["free_response_source"]
             if source == "api":
-                st.success("Tutor reply (Perplexity)", icon="🤖")
+                st.success("Tutor reply", icon="🤖")
             else:
-                st.info("Tutor reply (local fallback)", icon="📚")
+                st.info("Tutor reply", icon="📚")
             st.markdown(reply)
         else:
             st.caption("Type a question above and click **Ask tutor** to get started.")
