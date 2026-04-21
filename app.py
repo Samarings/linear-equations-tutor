@@ -143,13 +143,34 @@ section[data-testid="stSidebar"] {
     background: #EEF1EC;
     border-right: 1px solid var(--lt-soft);
 }
-section[data-testid="stSidebar"],
-section[data-testid="stSidebar"] * {
-    color: var(--lt-primary) !important;
+/* Force every piece of text inside the sidebar to the dark slate so nothing
+   stays white on a light background. Covers markdown, captions, labels,
+   radio options, and caption text. */
+section[data-testid="stSidebar"] *,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] div,
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] h4,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] *,
+section[data-testid="stSidebar"] [data-testid="stRadio"] label,
+section[data-testid="stSidebar"] [data-testid="stRadio"] label * {
+    color: #2F4858 !important;
 }
 section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] code {
-    color: var(--lt-primary) !important;
+    color: #2F4858 !important;
     background: rgba(47, 72, 88, 0.08) !important;
+}
+/* Keep the primary button text white on the dark button */
+section[data-testid="stSidebar"] .stButton > button,
+section[data-testid="stSidebar"] .stButton > button * {
+    color: #FFFFFF !important;
 }
 
 /* Tabs */
