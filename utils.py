@@ -222,6 +222,10 @@ def plot_line(
     # This is what makes a slope of 2 look twice as steep as a slope of 1.
     ax.set_aspect("equal", adjustable="box")
 
+    # Integer tick marks every 2 units — easier for students to read than 2.5s.
+    ax.set_xticks(np.arange(x_range[0], x_range[1] + 1, 2))
+    ax.set_yticks(np.arange(y_range[0], y_range[1] + 1, 2))
+
     ax.set_xlabel("x", fontsize=10, color="#2F4858")
     ax.set_ylabel("y", fontsize=10, color="#2F4858")
     ax.set_title("Line graph", fontsize=12, color="#2F4858", pad=10)
