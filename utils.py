@@ -192,15 +192,23 @@ def plot_line(
     m: float,
     b: float,
     x_range: Tuple[int, int] = (-10, 10),
+    y_range: Tuple[int, int] = (-10, 10),
     highlight_intercept: bool = True,
 ):
-    """Return a matplotlib Figure showing y = mx + b on a tidy grid."""
-    fig, ax = plt.subplots(figsize=(5.5, 4.2), dpi=120)
+    """Return a matplotlib Figure showing y = mx + b on a tidy grid.
+
+    The y-axis range is fixed (default ±10) and the axes are kept at equal
+    scale so slope changes actually look steeper/shallower — otherwise
+    matplotlib auto-scales the y-axis and a line with slope 5 looks the same
+    as a line with slope 1.
+    """
+    # Square figure + equal aspect makes slope visually accurate.
+    fig, ax = plt.subplots(figsize=(4.8, 4.8), dpi=120)
     xs = np.linspace(x_range[0], x_range[1], 200)
     ys = m * xs + b
     ax.plot(xs, ys, color="#2F4858", linewidth=2.4, label=f"y = {m:g}x + {b:g}")
 
-    if highlight_intercept:
+    if highlight_intercept and y_range[0] <= b <= y_range[1]:
         ax.scatter([0], [b], color="#86A873", zorder=5, s=70, label=f"y-intercept (0, {b:g})")
 
     # Axes
@@ -209,11 +217,10 @@ def plot_line(
     ax.grid(True, color="#E3E8EE", linewidth=0.6)
 
     ax.set_xlim(x_range)
-    # Auto y-limits, padded
-    y_pad = max(3.0, abs(m) * (x_range[1] - x_range[0]) * 0.15)
-    y_min = min(ys.min(), b) - y_pad * 0.2
-    y_max = max(ys.max(), b) + y_pad * 0.2
-    ax.set_ylim(y_min, y_max)
+    ax.set_ylim(y_range)
+    # Equal aspect ratio — one unit of x equals one unit of y on screen.
+    # This is what makes a slope of 2 look twice as steep as a slope of 1.
+    ax.set_aspect("equal", adjustable="box")
 
     ax.set_xlabel("x", fontsize=10, color="#2F4858")
     ax.set_ylabel("y", fontsize=10, color="#2F4858")
