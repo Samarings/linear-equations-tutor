@@ -40,6 +40,11 @@ TOPICS: Dict[str, Dict[str, str]] = {
         "emoji": "📐",
         "summary": "How to graph a line starting from the y-intercept and using the slope as rise/run.",
     },
+    "systems": {
+        "title": "Systems of Equations",
+        "emoji": "❌",
+        "summary": "Finding the point where two lines meet — by graphing, substitution, or elimination.",
+    },
     "word_problems": {
         "title": "Linear Word Problems",
         "emoji": "📝",
@@ -107,6 +112,36 @@ Follow these three simple steps:
 
 ✅ Tip: If m is a fraction like 3/4, rise = 3, run = 4.
 """,
+    "systems": """
+### Systems of two linear equations
+
+A **system of equations** is just **two lines at the same time**.
+The **solution** is the single point **(x, y)** that makes **both** equations true —
+on a graph, this is the point where the two lines **cross**.
+
+**Three ways to solve:**
+
+**1. Graphing** — draw both lines and read off where they intersect.
+Good for checking, but only exact when the crossing lands on grid points.
+
+**2. Substitution** — when one equation is already solved for *y* (like y = mx + b),
+plug that expression into the other equation.
+- Example: y = 2x + 1 and y = −x + 7
+- Since both equal y, set them equal: 2x + 1 = −x + 7
+- Solve: 3x = 6 → **x = 2**
+- Plug back in: y = 2(2) + 1 = **5**. Intersection: **(2, 5)**.
+
+**3. Elimination** — add or subtract the two equations to cancel a variable.
+Best when both equations are in the form Ax + By = C.
+
+**Three possible outcomes:**
+- **Different slopes** → exactly one intersection point (most common).
+- **Same slope, different intercepts** → parallel lines, **no solution**.
+- **Same slope, same intercept** → same line, **infinite solutions**.
+
+**Tip:** When both equations are in y = mx + b form, set the right sides equal
+to find *x*, then plug *x* back into either equation to find *y*.
+""",
     "word_problems": """
 ### Linear word problems
 
@@ -144,8 +179,11 @@ class Problem:
     answer_equation: Optional[Tuple[float, float]] = None  # (m, b) if applicable
     hints: List[str] = field(default_factory=list)
     solution_steps: List[str] = field(default_factory=list)
-    # Parsing hint: "number" | "equation_mb" | "slope" | "intercept"
+    # Parsing hint: "number" | "equation_mb" | "slope" | "intercept" | "point"
     answer_kind: str = "number"
+    # Extra data for rendering solutions (e.g. the two lines in a system problem).
+    # For systems problems: (m1, b1, m2, b2).
+    lines: Optional[Tuple[float, float, float, float]] = None
 
 
 def _rand_nonzero(lo: int, hi: int, rng: random.Random) -> int:
@@ -330,6 +368,83 @@ def _gen_graphing(difficulty: str, rng: random.Random) -> Problem:
     )
 
 
+# ---- Systems of equations -------------------------------------------------
+
+def _gen_systems(difficulty: str, rng: random.Random) -> Problem:
+    """Generate two lines that intersect at a nice integer point.
+
+    Strategy: pick the intersection point (x, y) first, then build two lines
+    that both pass through it. This guarantees integer answers every time.
+    """
+    if difficulty == "easy":
+        x = rng.randint(-4, 4)
+        y = rng.randint(-4, 4)
+        m1 = rng.choice([1, 2, -1, -2])
+        m2 = rng.choice([v for v in [1, 2, 3, -1, -2, -3] if v != m1])
+    elif difficulty == "medium":
+        x = rng.randint(-5, 5)
+        y = rng.randint(-6, 6)
+        m1 = rng.choice([1, 2, 3, -1, -2, -3])
+        m2 = rng.choice([v for v in [1, 2, 3, 4, -1, -2, -3, -4] if v != m1])
+    else:  # hard — include negative slopes, larger intercepts, and sometimes opposite-sign slopes
+        x = rng.randint(-6, 6)
+        y = rng.randint(-8, 8)
+        m1 = rng.choice([2, 3, 4, -2, -3, -4])
+        # Force the second slope to have opposite sign sometimes for a trickier crossing
+        pool = [v for v in [2, 3, 4, 5, -2, -3, -4, -5] if v != m1]
+        m2 = rng.choice(pool)
+
+    # Build b so each line passes through (x, y): y = m*x + b  →  b = y - m*x
+    b1 = y - m1 * x
+    b2 = y - m2 * x
+
+    eq1 = _fmt_line(m1, b1)
+    eq2 = _fmt_line(m2, b2)
+
+    # Pretty-print "m·x + b" so signs read naturally (e.g. "x − 10" instead of "1x + -10").
+    def _rhs(m: int, b: int) -> str:
+        mx = "x" if m == 1 else ("-x" if m == -1 else f"{m}x")
+        if b == 0:
+            return mx
+        sign = "+" if b > 0 else "−"
+        return f"{mx} {sign} {abs(b)}"
+
+    rhs1 = _rhs(m1, b1)
+    rhs2 = _rhs(m2, b2)
+    dx = m1 - m2
+    db = b2 - b1
+
+    question = (
+        f"Find the point where these two lines intersect:\n\n"
+        f"**Line 1:** {eq1}\n\n"
+        f"**Line 2:** {eq2}\n\n"
+        f"Enter your answer as an ordered pair in the form (x, y) — for example: (2, 5) or (-1, 3)."
+    )
+    hints = [
+        "At the intersection point, both equations give the same y for the same x.",
+        f"Since both right-hand sides equal y, set them equal: {rhs1} = {rhs2}.",
+        "Solve that equation for x, then plug x into either line to get y.",
+    ]
+    steps = [
+        f"Both lines share a point (x, y), so set the right sides equal: {rhs1} = {rhs2}.",
+        f"Collect x-terms on one side: {dx}x = {db}.",
+        f"Divide both sides by {dx}: x = {db} ÷ {dx} = {x}.",
+        f"Plug x = {x} into {eq1}: y = {rhs1.replace('x', f'({x})')} = {y}.",
+        f"The two lines intersect at **({x}, {y})**.",
+    ]
+    return Problem(
+        topic="systems",
+        difficulty=difficulty,
+        question=question,
+        answer=f"({x}, {y})",
+        answer_equation=(float(x), float(y)),  # (re)used to store the point for graphing
+        hints=hints,
+        solution_steps=steps,
+        answer_kind="point",
+        lines=(float(m1), float(b1), float(m2), float(b2)),
+    )
+
+
 # ---- Word problems --------------------------------------------------------
 
 _WORD_TEMPLATES = [
@@ -361,7 +476,154 @@ _WORD_TEMPLATES = [
 ]
 
 
+# Systems-of-equations word-problem templates.
+# Each describes two linear scenarios that meet at a single (x, y) point. The
+# generator below picks the crossing point first, then fills in the numbers.
+_SYSTEM_WORD_TEMPLATES = [
+    {
+        "scenario": (
+            "Gym A charges a ${b1} sign-up fee plus ${m1} per visit. "
+            "Gym B charges a ${b2} sign-up fee plus ${m2} per visit."
+        ),
+        "question_tail": (
+            "After how many visits do the two gyms cost the same, and what is that cost? "
+            "Enter your answer as a point (visits, cost) — for example: (4, 60)."
+        ),
+        "x_label": "visits",
+        "y_label": "total cost ($)",
+        "require_positive_x": True,
+    },
+    {
+        "scenario": (
+            "Phone plan A costs ${b1} per month plus ${m1} per GB of data. "
+            "Phone plan B costs ${b2} per month plus ${m2} per GB."
+        ),
+        "question_tail": (
+            "At how many GB do both plans cost the same, and what is that monthly cost? "
+            "Enter your answer as a point (GB, cost) — for example: (3, 42)."
+        ),
+        "x_label": "GB",
+        "y_label": "monthly cost ($)",
+        "require_positive_x": True,
+    },
+    {
+        "scenario": (
+            "Liam starts with ${b1} in savings and adds ${m1} each week. "
+            "Noor starts with ${b2} and adds ${m2} each week."
+        ),
+        "question_tail": (
+            "After how many weeks will they have the same amount, and how much will each have? "
+            "Enter your answer as a point (weeks, dollars) — for example: (5, 120)."
+        ),
+        "x_label": "weeks",
+        "y_label": "savings ($)",
+        "require_positive_x": True,
+    },
+    {
+        "scenario": (
+            "Pool A starts with {b1} litres and fills at {m1} L per minute. "
+            "Pool B starts with {b2} litres and fills at {m2} L per minute."
+        ),
+        "question_tail": (
+            "After how many minutes will both pools contain the same amount of water, "
+            "and how much water will that be? Enter your answer as a point (minutes, litres) — "
+            "for example: (6, 90)."
+        ),
+        "x_label": "minutes",
+        "y_label": "water (L)",
+        "require_positive_x": True,
+        "no_dollar": True,
+    },
+]
+
+
+def _gen_word_system(difficulty: str, rng: random.Random) -> Problem:
+    """Two-line word problem — the student finds the crossing point.
+
+    Numbers are chosen so the answer is a clean integer (x, y) with positive x
+    (you can't have -4 weeks).
+    """
+    if difficulty == "easy":
+        x = rng.randint(2, 6)
+        y_extra = rng.randint(10, 30)
+        m1 = rng.randint(2, 5)
+        m2 = rng.choice([v for v in range(1, 8) if v != m1])
+    elif difficulty == "medium":
+        x = rng.randint(3, 10)
+        y_extra = rng.randint(20, 60)
+        m1 = rng.randint(2, 8)
+        m2 = rng.choice([v for v in range(1, 12) if v != m1])
+    else:
+        x = rng.randint(4, 14)
+        y_extra = rng.randint(30, 90)
+        m1 = rng.randint(3, 12)
+        m2 = rng.choice([v for v in range(2, 16) if v != m1])
+
+    y = m1 * x + y_extra - m1 * x  # fallback — will be overwritten below
+    # Pick starting values so each line passes through (x, y) with b ≥ 0.
+    # Bigger-slope plan should have a smaller starting value so they actually cross at x > 0.
+    if m1 < m2:
+        m_small, m_big = m1, m2
+    else:
+        m_small, m_big = m2, m1
+    b_small = rng.randint(5, 30) + (m_big - m_small) * x  # larger starting value, smaller per-unit rate
+    b_big = b_small - (m_big - m_small) * x               # smaller starting value, larger per-unit rate
+    y = m_small * x + b_small  # same as m_big * x + b_big by construction
+
+    # Assign back to m1/b1, m2/b2 so the template text reads naturally.
+    # Keep the order the template was designed with (line 1 = smaller rate, line 2 = bigger rate).
+    m1, b1 = m_small, b_small
+    m2, b2 = m_big, b_big
+
+    tpl = rng.choice(_SYSTEM_WORD_TEMPLATES)
+    scenario = tpl["scenario"].format(b1=b1, m1=m1, b2=b2, m2=m2)
+    question = f"{scenario} {tpl['question_tail']}"
+
+    # Pretty-print right-hand sides for readable hints/steps.
+    def _rhs(m: int, b: int) -> str:
+        mx = "x" if m == 1 else ("-x" if m == -1 else f"{m}x")
+        if b == 0:
+            return mx
+        sign = "+" if b > 0 else "−"
+        return f"{mx} {sign} {abs(b)}"
+
+    rhs1 = _rhs(m1, b1)
+    rhs2 = _rhs(m2, b2)
+    dx = m1 - m2
+    db = b2 - b1
+
+    hints = [
+        "Write an equation for each scenario in the form y = (rate)·x + (starting value).",
+        f"Line 1: y = {rhs1}. Line 2: y = {rhs2}. Set them equal to find x.",
+        f"Solve {rhs1} = {rhs2} for x, then plug x back in to get y.",
+    ]
+    steps = [
+        f"Line 1 equation: y = {rhs1}.",
+        f"Line 2 equation: y = {rhs2}.",
+        f"At the crossing point both equations share the same y, so: {rhs1} = {rhs2}.",
+        f"Collect x-terms: {dx}x = {db}.",
+        f"Divide: x = {db} ÷ {dx} = {x} {tpl['x_label']}.",
+        f"Plug x = {x} into Line 1: y = {rhs1.replace('x', f'({x})')} = {y} {tpl['y_label']}.",
+        f"Answer: ({x}, {y}).",
+    ]
+    return Problem(
+        topic="word_problems",
+        difficulty=difficulty,
+        question=question,
+        answer=f"({x}, {y})",
+        answer_equation=(float(x), float(y)),
+        hints=hints,
+        solution_steps=steps,
+        answer_kind="point",
+        lines=(float(m1), float(b1), float(m2), float(b2)),
+    )
+
+
 def _gen_word(difficulty: str, rng: random.Random) -> Problem:
+    # Mix in systems-of-equations word problems ~40% of the time so students
+    # see real variety instead of the same y = mx + b pattern every time.
+    if rng.random() < 0.4:
+        return _gen_word_system(difficulty, rng)
     tpl = rng.choice(_WORD_TEMPLATES)
     if difficulty == "easy":
         b = rng.randint(2, 10)
@@ -413,6 +675,7 @@ _GENERATORS: Dict[str, Callable[[str, random.Random], Problem]] = {
     "slope": _gen_slope,
     "intercept": _gen_intercept,
     "graphing": _gen_graphing,
+    "systems": _gen_systems,
     "word_problems": _gen_word,
 }
 

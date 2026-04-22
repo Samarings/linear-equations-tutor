@@ -52,7 +52,7 @@ from ml_model import (
     recommend_next_action,
     train_mastery_model,
 )
-from utils import check_answer, get_api_key, perplexity_chat, plot_line
+from utils import check_answer, get_api_key, perplexity_chat, plot_line, plot_system
 
 
 # ---------------------------------------------------------------------------
@@ -515,7 +515,7 @@ st.markdown(
     """
     <div class="hero">
       <h1>Linear Equations Tutor</h1>
-      <p>Master y = mx + b — slope, intercepts, graphing, and word problems — with practice, hints, and mastery tracking.</p>
+      <p>Master y = mx + b — slope, intercepts, graphing, systems of equations, and word problems — with practice, hints, and mastery tracking.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -559,6 +559,7 @@ def page_home() -> None:
                 "- 📈 **Slope** — what *m* means and how to calculate it\n"
                 "- 🎯 **y-intercept** — what *b* means on a graph and in an equation\n"
                 "- 📐 **Graphing** — drawing a line from slope-intercept form\n"
+                "- ❌ **Systems of equations** — finding where two lines meet\n"
                 "- 📝 **Word problems** — turning real situations into equations"
             )
             st.caption(
@@ -640,6 +641,33 @@ def page_learn() -> None:
                 b_val = cB.slider("y-intercept (b)", -8.0, 8.0, 1.0, 1.0, key="lesson_b")
                 st.pyplot(plot_line(m_val, b_val), use_container_width=True)
 
+        # Live two-line demo for the systems topic.
+        if chosen_topic == "systems":
+            with st.container(border=True):
+                st.subheader("Try it: where do these lines meet?")
+                st.caption(
+                    "Change the slopes and intercepts. The green dot marks the intersection — "
+                    "the (x, y) point that makes both equations true."
+                )
+                c1, c2 = st.columns(2)
+                m1_val = c1.slider("Line 1 slope (m₁)", -5.0, 5.0, 2.0, 0.5, key="sys_m1")
+                b1_val = c1.slider("Line 1 intercept (b₁)", -8.0, 8.0, 1.0, 1.0, key="sys_b1")
+                m2_val = c2.slider("Line 2 slope (m₂)", -5.0, 5.0, -1.0, 0.5, key="sys_m2")
+                b2_val = c2.slider("Line 2 intercept (b₂)", -8.0, 8.0, 4.0, 1.0, key="sys_b2")
+                if abs(m1_val - m2_val) < 1e-9:
+                    if abs(b1_val - b2_val) < 1e-9:
+                        st.info(
+                            "Both lines are the same — every point on the line is a solution."
+                        )
+                    else:
+                        st.info(
+                            "These lines are parallel (same slope, different intercepts) — they "
+                            "never cross, so the system has no solution."
+                        )
+                st.pyplot(
+                    plot_system(m1_val, b1_val, m2_val, b2_val), use_container_width=True
+                )
+
     with tab_practice:
         problem = st.session_state["current_problem"]
         if problem is None:
@@ -704,7 +732,14 @@ def page_learn() -> None:
             with st.expander("📝 Show step-by-step solution"):
                 for i, step in enumerate(problem.solution_steps, start=1):
                     st.markdown(f"**Step {i}.** {step}")
-                if problem.answer_equation is not None:
+                # Visualize the solution depending on the problem kind.
+                if problem.answer_kind == "point" and getattr(problem, "lines", None):
+                    m1_t, b1_t, m2_t, b2_t = problem.lines
+                    st.pyplot(
+                        plot_system(m1_t, b1_t, m2_t, b2_t),
+                        use_container_width=True,
+                    )
+                elif problem.answer_equation is not None and problem.answer_kind == "equation_mb":
                     m_t, b_t = problem.answer_equation
                     st.pyplot(plot_line(m_t, b_t), use_container_width=True)
 
@@ -720,7 +755,7 @@ def page_ask() -> None:
     with st.container(border=True):
         st.subheader("Ask a question")
         st.caption(
-            "Ask anything about slope, y-intercept, graphing, or word problems "
+            "Ask anything about slope, y-intercept, graphing, systems of equations, or word problems "
             "and the tutor will walk you through it step by step."
         )
 
@@ -754,7 +789,9 @@ def page_ask() -> None:
             else:
                 # Local fallback: show the explanation most relevant to the question
                 q_low = question.lower()
-                if "intercept" in q_low:
+                if "system" in q_low or "intersect" in q_low or "two lines" in q_low:
+                    topic = "systems"
+                elif "intercept" in q_low:
                     topic = "intercept"
                 elif "graph" in q_low or "plot" in q_low or "draw" in q_low:
                     topic = "graphing"
@@ -762,6 +799,7 @@ def page_ask() -> None:
                     topic = "word_problems"
                 else:
                     topic = "slope"
+
                 st.session_state["free_response_answer"] = (
                     f"Here's a local explanation that should help:\n\n{get_explanation(topic)}"
                 )

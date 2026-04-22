@@ -102,6 +102,25 @@ _EQ_PATTERN = re.compile(
 _EQ_PATTERN_NO_B = re.compile(r"^y\s*=\s*(?P<m>-?\d*\.?\d*)\s*x$")
 _EQ_PATTERN_CONST = re.compile(r"^y\s*=\s*(?P<b>-?\d+\.?\d*)$")
 
+# Matches "(2, 5)", "2, 5", "(-1,3)", "x=2, y=5", etc.
+_POINT_PATTERN = re.compile(
+    r"^\(?\s*(?:x\s*=\s*)?(?P<x>-?\d+\.?\d*)\s*,\s*(?:y\s*=\s*)?(?P<y>-?\d+\.?\d*)\s*\)?$"
+)
+
+
+def parse_point(text: str) -> Optional[Tuple[float, float]]:
+    """Parse an ordered pair like '(2, 5)' or '2,5' into (x, y)."""
+    if not text:
+        return None
+    t = text.lower().replace(" ", "")
+    m = _POINT_PATTERN.match(t)
+    if not m:
+        return None
+    try:
+        return float(m.group("x")), float(m.group("y"))
+    except ValueError:
+        return None
+
 
 def parse_line_equation(text: str) -> Optional[Tuple[float, float]]:
     """Parse a string like 'y=2x+3' or 'y = -x - 4' into (m, b)."""
@@ -181,12 +200,40 @@ def check_answer(student_input: str, problem) -> Tuple[bool, str]:
             return True, "✅ Correct! Equation matches."
         return False, "Close — double-check the slope (m) and the y-intercept (b)."
 
+    if kind == "point":
+        parsed = parse_point(student_input)
+        if parsed is None:
+            return False, "Please enter your answer as an ordered pair, for example: (2, 5)."
+        x_stu, y_stu = parsed
+        x_t, y_t = problem.answer_equation or (0.0, 0.0)
+        if abs(x_stu - x_t) < 1e-6 and abs(y_stu - y_t) < 1e-6:
+            return True, "✅ Correct! That's the intersection point."
+        return False, f"Not quite. Your answer: ({x_stu:g}, {y_stu:g}). Double-check both coordinates."
+
     return False, "Unsupported answer type."
 
 
 # ---------------------------------------------------------------------------
 # Graphing
 # ---------------------------------------------------------------------------
+
+def _line_label(m: float, b: float) -> str:
+    """Format 'y = mx + b' with natural signs for the plot legend."""
+    m_f = int(m) if float(m).is_integer() else m
+    b_f = int(b) if float(b).is_integer() else b
+    # Slope part
+    if m_f == 0:
+        return f"y = {b_f:g}"
+    if m_f == 1:
+        mx = "x"
+    elif m_f == -1:
+        mx = "-x"
+    else:
+        mx = f"{m_f:g}x"
+    if b_f == 0:
+        return f"y = {mx}"
+    sign = "+" if b_f > 0 else "−"
+    return f"y = {mx} {sign} {abs(b_f):g}"
 
 def plot_line(
     m: float,
@@ -206,7 +253,7 @@ def plot_line(
     fig, ax = plt.subplots(figsize=(4.8, 4.8), dpi=120)
     xs = np.linspace(x_range[0], x_range[1], 200)
     ys = m * xs + b
-    ax.plot(xs, ys, color="#2F4858", linewidth=2.4, label=f"y = {m:g}x + {b:g}")
+    ax.plot(xs, ys, color="#2F4858", linewidth=2.4, label=_line_label(m, b))
 
     if highlight_intercept and y_range[0] <= b <= y_range[1]:
         ax.scatter([0], [b], color="#86A873", zorder=5, s=70, label=f"y-intercept (0, {b:g})")
@@ -234,5 +281,49 @@ def plot_line(
     for spine in ax.spines.values():
         spine.set_color("#CBD2D9")
 
+    fig.tight_layout()
+    return fig
+
+
+def plot_system(
+    m1: float,
+    b1: float,
+    m2: float,
+    b2: float,
+    x_range: Tuple[int, int] = (-10, 10),
+    y_range: Tuple[int, int] = (-10, 10),
+):
+    """Return a Figure showing two lines and their intersection point (if any)."""
+    fig, ax = plt.subplots(figsize=(4.8, 4.8), dpi=120)
+    xs = np.linspace(x_range[0], x_range[1], 200)
+    ys1 = m1 * xs + b1
+    ys2 = m2 * xs + b2
+    ax.plot(xs, ys1, color="#2F4858", linewidth=2.2, label=_line_label(m1, b1))
+    ax.plot(xs, ys2, color="#B97A57", linewidth=2.2, label=_line_label(m2, b2))
+
+    # Find intersection when slopes differ.
+    if abs(m1 - m2) > 1e-9:
+        xi = (b2 - b1) / (m1 - m2)
+        yi = m1 * xi + b1
+        if x_range[0] <= xi <= x_range[1] and y_range[0] <= yi <= y_range[1]:
+            ax.scatter(
+                [xi], [yi], color="#86A873", zorder=5, s=90,
+                label=f"Intersection ({xi:g}, {yi:g})",
+            )
+
+    ax.axhline(0, color="#9AA5B1", linewidth=0.8)
+    ax.axvline(0, color="#9AA5B1", linewidth=0.8)
+    ax.grid(True, color="#E3E8EE", linewidth=0.6)
+    ax.set_xlim(x_range)
+    ax.set_ylim(y_range)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xticks(np.arange(x_range[0], x_range[1] + 1, 2))
+    ax.set_yticks(np.arange(y_range[0], y_range[1] + 1, 2))
+    ax.set_xlabel("x", fontsize=10, color="#2F4858")
+    ax.set_ylabel("y", fontsize=10, color="#2F4858")
+    ax.set_title("System of two lines", fontsize=12, color="#2F4858", pad=10)
+    ax.legend(loc="upper left", fontsize=8, frameon=False)
+    for spine in ax.spines.values():
+        spine.set_color("#CBD2D9")
     fig.tight_layout()
     return fig
