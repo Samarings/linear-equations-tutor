@@ -53,6 +53,8 @@ from ml_model import (
     train_mastery_model,
 )
 from utils import check_answer, get_api_key, perplexity_chat, plot_line, plot_system
+from custom_css import CUSTOM_CSS
+from sounds import play_correct, play_wrong, play_hint, play_click, play_new_problem
 
 
 # ---------------------------------------------------------------------------
@@ -66,159 +68,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Calm academic palette:
-#   Background: #F7F5F0 (warm off-white)
-#   Primary:    #2F4858 (deep slate)
-#   Accent:     #86A873 (sage)
-#   Soft:       #E3E8EE (mist)
-CUSTOM_CSS = """
-<style>
-:root {
-    --lt-bg: #F7F5F0;
-    --lt-surface: #FFFFFF;
-    --lt-primary: #2F4858;
-    --lt-accent: #86A873;
-    --lt-muted: #6B7280;
-    --lt-soft: #E3E8EE;
-}
-
-html, body, [class*="stApp"] {
-    background-color: var(--lt-bg);
-    color: var(--lt-primary);
-    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
-}
-
-h1, h2, h3, h4 {
-    color: var(--lt-primary) !important;
-    letter-spacing: -0.01em;
-}
-
-/* Card-like containers */
-div[data-testid="stVerticalBlockBorderWrapper"] {
-    background: var(--lt-surface);
-    border-radius: 14px;
-}
-
-/* Metric cards */
-div[data-testid="stMetric"] {
-    background: var(--lt-surface);
-    border: 1px solid var(--lt-soft);
-    border-radius: 12px;
-    padding: 14px 16px;
-}
-div[data-testid="stMetricLabel"] {
-    color: var(--lt-muted) !important;
-    font-size: 0.85rem;
-}
-div[data-testid="stMetricValue"] {
-    color: var(--lt-primary) !important;
-}
-
-/* Buttons */
-.stButton > button {
-    background: var(--lt-primary);
-    color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 0.5rem 1rem;
-    font-weight: 500;
-    transition: transform 0.05s ease-in-out, background 0.15s;
-}
-.stButton > button:hover {
-    background: #1F313C;
-    color: white;
-}
-.stButton > button:active {
-    transform: translateY(1px);
-}
-
-/* Secondary / form buttons */
-button[kind="secondary"] {
-    background: var(--lt-surface) !important;
-    color: var(--lt-primary) !important;
-    border: 1px solid var(--lt-soft) !important;
-}
-
-/* Sidebar */
-section[data-testid="stSidebar"] {
-    background: #EEF1EC;
-    border-right: 1px solid var(--lt-soft);
-}
-/* Force every piece of text inside the sidebar to the dark slate so nothing
-   stays white on a light background. Covers markdown, captions, labels,
-   radio options, and caption text. */
-section[data-testid="stSidebar"] *,
-section[data-testid="stSidebar"] p,
-section[data-testid="stSidebar"] span,
-section[data-testid="stSidebar"] label,
-section[data-testid="stSidebar"] div,
-section[data-testid="stSidebar"] h1,
-section[data-testid="stSidebar"] h2,
-section[data-testid="stSidebar"] h3,
-section[data-testid="stSidebar"] h4,
-section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"],
-section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
-section[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
-section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] *,
-section[data-testid="stSidebar"] [data-testid="stRadio"] label,
-section[data-testid="stSidebar"] [data-testid="stRadio"] label * {
-    color: #2F4858 !important;
-}
-section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] code {
-    color: #2F4858 !important;
-    background: rgba(47, 72, 88, 0.08) !important;
-}
-/* Sidebar buttons: white surface with dark text so the label stays visible */
-section[data-testid="stSidebar"] .stButton > button,
-section[data-testid="stSidebar"] .stButton > button:hover,
-section[data-testid="stSidebar"] .stButton > button:focus,
-section[data-testid="stSidebar"] .stButton > button:active,
-section[data-testid="stSidebar"] .stButton > button * {
-    background: #FFFFFF !important;
-    color: #2F4858 !important;
-    border: 1px solid #CBD2D9 !important;
-}
-section[data-testid="stSidebar"] .stButton > button:hover {
-    background: #F3F4F6 !important;
-}
-
-/* Tabs */
-.stTabs [role="tablist"] button {
-    color: var(--lt-muted);
-}
-.stTabs [role="tablist"] button[aria-selected="true"] {
-    color: var(--lt-primary);
-    border-bottom: 2px solid var(--lt-accent) !important;
-}
-
-/* Info/success/warn blocks use softer tones */
-div[data-testid="stAlert"] {
-    border-radius: 10px;
-}
-
-.hero {
-    background: linear-gradient(135deg, #2F4858 0%, #3E6374 100%);
-    color: white;
-    padding: 28px 32px;
-    border-radius: 16px;
-    margin-bottom: 18px;
-}
-.hero h1 { color: white !important; margin: 0 0 6px 0; font-size: 1.7rem; }
-.hero p  { color: #D8E2E8; margin: 0; font-size: 0.98rem; }
-
-.topic-chip {
-    display: inline-block;
-    background: var(--lt-soft);
-    color: var(--lt-primary);
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    margin-right: 6px;
-}
-
-.small-muted { color: var(--lt-muted); font-size: 0.85rem; }
-</style>
-"""
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
@@ -312,7 +161,7 @@ def render_auth_gate() -> None:
     st.markdown(
         """
         <div class="hero">
-          <h1>Linear Equations Tutor</h1>
+          <h1>📐 Linear Equations Tutor</h1>
           <p>Create a free account to save your mastery progress and problem history across sessions.</p>
         </div>
         """,
@@ -514,8 +363,10 @@ with st.sidebar:
 st.markdown(
     """
     <div class="hero">
-      <h1>Linear Equations Tutor</h1>
-      <p>Master y = mx + b — slope, intercepts, graphing, systems of equations, and word problems — with practice, hints, and mastery tracking.</p>
+      <h1>📐 Linear Equations Tutor</h1>
+      <p>Master <strong>y = mx + b</strong> — slope, intercepts, graphing,
+         systems of equations, and word problems — with adaptive practice,
+         scaffolded hints, and mastery tracking powered by machine learning.</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -535,6 +386,22 @@ def progress_strip() -> None:
     c2.metric("Correct", correct)
     c3.metric("Accuracy", f"{acc:.0f}%")
     c4.metric("Mastery", st.session_state["mastery_prediction"].title())
+
+    # Animated bar under the metrics
+    mastery_pct = {"low": 20, "medium": 55, "high": 90}.get(
+        st.session_state["mastery_prediction"], 20
+    )
+    st.markdown(
+        f"""
+        <div class="mastery-bar-wrap">
+          <div class="mastery-bar-fill" style="width:{mastery_pct}%"></div>
+        </div>
+        <p style="text-align:right;font-size:0.78rem;color:#6B7280;margin:2px 0 0;">
+          Mastery progress
+        </p>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -581,6 +448,7 @@ def page_home() -> None:
                 ):
                     st.session_state["current_topic"] = key
                     new_problem(key, st.session_state["current_difficulty"])
+                    play_click()         # subtle click
                     st.toast(f"Topic set: {meta['title']}", icon="📘")
 
         with st.container(border=True):
@@ -702,12 +570,18 @@ def page_learn() -> None:
                 # Only count a real attempt when the input parses (msg isn't the "type a number" style issue)
                 if student_answer.strip() != "":
                     record_attempt(correct)
+                    if correct:
+                        play_correct()   # chime + confetti
+                    else:
+                        play_wrong()     # thud + shake
 
             if hint_clicked:
                 reveal_hint()
+                play_hint()              # soft whoosh
 
             if new_clicked:
                 new_problem(chosen_topic, chosen_diff)
+                play_new_problem()       # rising cue
                 st.rerun()
 
             # Feedback
