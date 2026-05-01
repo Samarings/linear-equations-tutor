@@ -62,7 +62,7 @@ from sounds import play_correct, play_wrong, play_hint, play_click, play_new_pro
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title="Linea AI",
+    page_title="OpenMath AI",
     page_icon="📐",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -161,7 +161,7 @@ def render_auth_gate() -> None:
     st.markdown(
         """
         <div class="hero">
-          <h1>📐 Linea AI</h1>
+          <h1>📐 OpenMath AI</h1>
           <p>Your personal linear equations tutor. Create a free account to save your mastery progress and problem history across sessions.</p>
         </div>
         """,
@@ -328,7 +328,7 @@ hydrate_from_cloud()
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    st.markdown("### 📐 Linea AI")
+    st.markdown("### 📐 OpenMath AI")
     st.caption("Grade 9 · y = mx + b")
 
     page = st.radio(
@@ -363,7 +363,7 @@ with st.sidebar:
 st.markdown(
     """
     <div class="hero">
-      <h1>📐 Linea AI</h1>
+      <h1>📐 OpenMath AI</h1>
       <p>Your personal linear equations tutor. Master <strong>y = mx + b</strong> —
          slope, intercepts, graphing, systems of equations, and word problems —
          with adaptive practice, scaffolded hints, and mastery tracking powered by machine learning.</p>
