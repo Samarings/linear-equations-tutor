@@ -1,4 +1,4 @@
-# Linear Equations Tutor
+# Linea AI
 
 A friendly, dashboard-style Streamlit tutor for Grade 9 math focused on
 linear equations in the form **y = mx + b** — slope, y-intercept, graphing,

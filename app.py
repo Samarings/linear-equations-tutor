@@ -62,7 +62,7 @@ from sounds import play_correct, play_wrong, play_hint, play_click, play_new_pro
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
-    page_title="Linear Equations Tutor",
+    page_title="Linea AI",
     page_icon="📐",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -161,8 +161,8 @@ def render_auth_gate() -> None:
     st.markdown(
         """
         <div class="hero">
-          <h1>📐 Linear Equations Tutor</h1>
-          <p>Create a free account to save your mastery progress and problem history across sessions.</p>
+          <h1>📐 Linea AI</h1>
+          <p>Your personal linear equations tutor. Create a free account to save your mastery progress and problem history across sessions.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -328,7 +328,7 @@ hydrate_from_cloud()
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    st.markdown("### 📐 Linear Tutor")
+    st.markdown("### 📐 Linea AI")
     st.caption("Grade 9 · y = mx + b")
 
     page = st.radio(
@@ -363,10 +363,10 @@ with st.sidebar:
 st.markdown(
     """
     <div class="hero">
-      <h1>📐 Linear Equations Tutor</h1>
-      <p>Master <strong>y = mx + b</strong> — slope, intercepts, graphing,
-         systems of equations, and word problems — with adaptive practice,
-         scaffolded hints, and mastery tracking powered by machine learning.</p>
+      <h1>📐 Linea AI</h1>
+      <p>Your personal linear equations tutor. Master <strong>y = mx + b</strong> —
+         slope, intercepts, graphing, systems of equations, and word problems —
+         with adaptive practice, scaffolded hints, and mastery tracking powered by machine learning.</p>
     </div>
     """,
     unsafe_allow_html=True,
