@@ -508,6 +508,37 @@ def page_home() -> None:
             st.subheader("What's next for you")
             st.info(st.session_state["recommended_next_action"], icon="🎯")
 
+        # Live BKT readiness snapshot — same data as the dashboard panel,
+        # surfaced on the home page so the BKT layer is visible without
+        # needing to navigate to the dashboard.
+        try:
+            _tracker_home = get_bkt_tracker()
+            _readiness_home = _tracker_home.eqao_readiness(threshold=0.75)
+            _overall_home = _tracker_home.overall_readiness_score(threshold=0.75)
+            with st.container(border=True):
+                st.subheader("🧠 BKT mastery snapshot")
+                st.caption(
+                    "Bayesian Knowledge Tracing tracks a hidden P(mastered) per topic, "
+                    "warm-started from the Random Forest and updated after every attempt."
+                )
+                _cols = st.columns(len(_readiness_home))
+                for _i, (_topic_key, _ready) in enumerate(_readiness_home.items()):
+                    _p = _tracker_home.p_mastered(_topic_key)
+                    _title = TOPICS.get(_topic_key, {}).get("title", _topic_key)
+                    _emoji = TOPICS.get(_topic_key, {}).get("emoji", "•")
+                    _cols[_i].metric(
+                        f"{_emoji} {_title}",
+                        f"{_p:.0%}",
+                        "EQAO ready" if _ready else "keep practicing",
+                        delta_color="normal" if _ready else "off",
+                    )
+                st.progress(
+                    min(max(_overall_home, 0.0), 1.0),
+                    text=f"Overall EQAO readiness: {_overall_home:.0%}",
+                )
+        except Exception:
+            pass
+
     with right:
         with st.container(border=True):
             st.subheader("Pick a topic")
@@ -525,10 +556,16 @@ def page_home() -> None:
         with st.container(border=True):
             st.subheader("About mastery tracking")
             st.caption(
-                "A scikit-learn **Random Forest classifier** (supervised, not reinforcement learning) "
-                "predicts your mastery as **low / medium / high** from your recent accuracy, "
-                "number of attempts, hint usage, and response time. "
-                "Adaptive next-step suggestions are separate rule-based logic on top of that prediction."
+                "Two ML layers work together. A scikit-learn **Random Forest classifier** "
+                "(supervised, not reinforcement learning) predicts your mastery from 13 behavioral "
+                "features — recent accuracy, streaks, normalized response latency, hint utilization, "
+                "and temporal trajectory — mapping to Ontario EQAO levels 1–4 shown as **low / medium / high**."
+            )
+            st.caption(
+                "On top of that, a **Bayesian Knowledge Tracing (BKT)** layer maintains a per-topic "
+                "hidden-state P(mastered), warm-started from the Random Forest output and updated after "
+                "every attempt. The snapshot above shows your live BKT readiness. "
+                "Adaptive next-step suggestions are separate rule-based logic layered on top."
             )
 
 
