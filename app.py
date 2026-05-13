@@ -453,22 +453,29 @@ def progress_strip() -> None:
     total = st.session_state["total_attempts"]
     correct = st.session_state["correct_attempts"]
     acc = (correct / total * 100.0) if total else 0.0
+
+    # BKT overall readiness drives the headline mastery number.
+    try:
+        _tracker = get_bkt_tracker()
+        bkt_overall = _tracker.overall_readiness_score(threshold=0.75)
+    except Exception:
+        bkt_overall = 0.0
+
     c1.metric("Attempts", total)
     c2.metric("Correct", correct)
     c3.metric("Accuracy", f"{acc:.0f}%")
-    c4.metric("Mastery", st.session_state["mastery_prediction"].title())
+    c4.metric("BKT readiness", f"{bkt_overall:.0%}")
 
-    # Animated bar under the metrics
-    mastery_pct = {"low": 20, "medium": 55, "high": 90}.get(
-        st.session_state["mastery_prediction"], 20
-    )
+    # Animated bar driven by BKT overall readiness (proportion of topics
+    # where P(mastered) >= 0.75). This is the headline progress signal.
+    bar_pct = int(round(min(max(bkt_overall, 0.0), 1.0) * 100))
     st.markdown(
         f"""
         <div class="mastery-bar-wrap">
-          <div class="mastery-bar-fill" style="width:{mastery_pct}%"></div>
+          <div class="mastery-bar-fill" style="width:{bar_pct}%"></div>
         </div>
         <p style="text-align:right;font-size:0.78rem;color:#6B7280;margin:2px 0 0;">
-          Mastery progress
+          EQAO readiness (Bayesian Knowledge Tracing)
         </p>
         """,
         unsafe_allow_html=True,
@@ -556,17 +563,20 @@ def page_home() -> None:
         with st.container(border=True):
             st.subheader("About mastery tracking")
             st.caption(
-                "Two ML layers work together. A scikit-learn **Random Forest classifier** "
-                "(supervised, not reinforcement learning) predicts your mastery from 13 behavioral "
-                "features — recent accuracy, streaks, normalized response latency, hint utilization, "
-                "and temporal trajectory — mapping to Ontario EQAO levels 1–4 shown as **low / medium / high**."
+                "**Bayesian Knowledge Tracing (BKT)** is the primary mastery model. It maintains a "
+                "hidden-state P(mastered) per topic and updates it after every attempt using the "
+                "observed correctness, slip probability, and guess probability — the same family of "
+                "models used by Carnegie Mellon's Cognitive Tutor. A topic counts as **EQAO-ready** "
+                "once P(mastered) ≥ 0.75, mirroring the Ontario provincial standard."
             )
-            st.caption(
-                "On top of that, a **Bayesian Knowledge Tracing (BKT)** layer maintains a per-topic "
-                "hidden-state P(mastered), warm-started from the Random Forest output and updated after "
-                "every attempt. The snapshot above shows your live BKT readiness. "
-                "Adaptive next-step suggestions are separate rule-based logic layered on top."
-            )
+            with st.expander("Random Forest classifier (warm-start · advanced)"):
+                st.caption(
+                    "A scikit-learn **Random Forest** (supervised, not reinforcement learning) trained "
+                    "on 13 behavioral features — recent accuracy, streaks, normalized response latency, "
+                    "hint utilization, and temporal trajectory — classifies you into Ontario EQAO "
+                    "levels 1–4. Its probability output seeds the BKT prior so BKT doesn't have to "
+                    "start cold. Adaptive next-step suggestions are separate rule-based logic on top."
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -820,62 +830,84 @@ def page_dashboard() -> None:
     left, right = st.columns([1.3, 1])
 
     with left:
+        # ----- BKT (primary mastery model) ----------------------------------
+        try:
+            _tracker = get_bkt_tracker()
+            _readiness = _tracker.eqao_readiness(threshold=0.75)
+            _overall = _tracker.overall_readiness_score(threshold=0.75)
+        except Exception:
+            _tracker, _readiness, _overall = None, {}, 0.0
+
         with st.container(border=True):
-            st.subheader("Mastery prediction")
-            label = st.session_state["mastery_prediction"]
-            probs = st.session_state["mastery_probs"]
-            st.metric("Current level", label.title())
-            # Render the probability bars in pedagogical order (Low → Medium → High).
-            import matplotlib.pyplot as _plt  # local import keeps top clean
-            _fig, _ax = _plt.subplots(figsize=(5.2, 2.6), dpi=120)
-            _labels = [c.title() for c in FRIENDLY_BANDS]
-            _values = [probs.get(c, 0.0) for c in FRIENDLY_BANDS]
-            _colors = ["#C9D7C1", "#A7C098", "#86A873"]
-            _bars = _ax.bar(_labels, _values, color=_colors, edgecolor="#4F6B44")
-            _ax.set_ylim(0, 1.05)
-            _ax.set_ylabel("Probability", color="#2F4858", fontsize=9)
-            _ax.grid(axis="y", color="#E3E8EE", linewidth=0.6)
-            for _s in _ax.spines.values():
-                _s.set_color("#CBD2D9")
-            for _bar, _v in zip(_bars, _values):
-                _ax.text(_bar.get_x() + _bar.get_width() / 2, _v + 0.03,
-                         f"{_v:.0%}", ha="center", fontsize=9, color="#2F4858")
-            _fig.tight_layout()
-            st.pyplot(_fig, use_container_width=True)
+            st.subheader("🧠 BKT mastery by topic")
             st.caption(
-                "Predicted by a scikit-learn Random Forest using your recent correctness, "
-                "attempt count, hint usage, and average response time."
+                "Bayesian Knowledge Tracing maintains a hidden-state P(mastered) per topic. "
+                "It updates after every attempt using observed correctness plus slip/guess "
+                "probabilities calibrated for Grade 9 EQAO content."
             )
+            if _tracker is not None and _readiness:
+                st.metric(
+                    "Overall EQAO readiness",
+                    f"{_overall:.0%}",
+                    f"{sum(_readiness.values())}/{len(_readiness)} topics mastered",
+                )
+                st.progress(min(max(_overall, 0.0), 1.0))
+
+                # Per-topic probability bars
+                import matplotlib.pyplot as _plt
+                _topic_keys = list(_readiness.keys())
+                _topic_names = [TOPICS.get(k, {}).get("title", k) for k in _topic_keys]
+                _topic_pmast = [_tracker.p_mastered(k) for k in _topic_keys]
+                _bar_colors = ["#86A873" if p >= 0.75 else "#A7C098" if p >= 0.5 else "#C9D7C1"
+                               for p in _topic_pmast]
+                _fig, _ax = _plt.subplots(figsize=(5.6, 3.0), dpi=120)
+                _bars = _ax.barh(_topic_names, _topic_pmast, color=_bar_colors, edgecolor="#4F6B44")
+                _ax.axvline(0.75, color="#E76F51", linestyle="--", linewidth=1, label="EQAO ready (0.75)")
+                _ax.set_xlim(0, 1.0)
+                _ax.set_xlabel("P(mastered)", color="#2F4858", fontsize=9)
+                _ax.invert_yaxis()
+                _ax.grid(axis="x", color="#E3E8EE", linewidth=0.6)
+                for _s in _ax.spines.values():
+                    _s.set_color("#CBD2D9")
+                for _bar, _v in zip(_bars, _topic_pmast):
+                    _ax.text(_v + 0.02, _bar.get_y() + _bar.get_height() / 2,
+                             f"{_v:.0%}", va="center", fontsize=8, color="#2F4858")
+                _ax.legend(fontsize=8, loc="lower right", frameon=False)
+                _fig.tight_layout()
+                st.pyplot(_fig, use_container_width=True)
+            else:
+                st.info("Solve a problem in Learn & Practice to start populating BKT.", icon="📝")
 
         with st.container(border=True):
             st.subheader("Next action")
             st.info(st.session_state["recommended_next_action"], icon="🧭")
 
-        # Bayesian Knowledge Tracing per-topic readiness
-        try:
-            _tracker = get_bkt_tracker()
-            _readiness = _tracker.eqao_readiness(threshold=0.75)
-            _bkt_rows = []
-            for _topic_key, _ready in _readiness.items():
-                _p = _tracker.p_mastered(_topic_key)
-                _bkt_rows.append({
-                    "Topic": TOPICS.get(_topic_key, {}).get("title", _topic_key),
-                    "P(mastered)": f"{_p:.0%}",
-                    "EQAO ready": "✅" if _ready else "⏳",
-                })
-            if _bkt_rows:
-                with st.container(border=True):
-                    st.subheader("BKT mastery by topic")
-                    st.caption(
-                        "Bayesian Knowledge Tracing keeps a hidden-state estimate of mastery per topic, "
-                        "warm-started from the Random Forest and updated after every attempt."
-                    )
-                    st.dataframe(pd.DataFrame(_bkt_rows), use_container_width=True, hide_index=True)
-                    _overall = _tracker.overall_readiness_score(threshold=0.75)
-                    st.progress(min(max(_overall, 0.0), 1.0),
-                                text=f"Overall EQAO readiness: {_overall:.0%}")
-        except Exception:
-            pass
+        # ----- RF classifier (demoted to expander) --------------------------
+        with st.expander("🌲 Random Forest classifier details (advanced)"):
+            label = st.session_state["mastery_prediction"]
+            probs = st.session_state["mastery_probs"]
+            st.caption(
+                "The Random Forest produces a one-shot classification from your 13 behavioral "
+                "features. Its output also warm-starts the BKT prior above so BKT doesn't begin "
+                "from a cold default."
+            )
+            st.metric("RF current level", label.title())
+            import matplotlib.pyplot as _plt2
+            _fig2, _ax2 = _plt2.subplots(figsize=(5.2, 2.4), dpi=120)
+            _labels2 = [c.title() for c in FRIENDLY_BANDS]
+            _values2 = [probs.get(c, 0.0) for c in FRIENDLY_BANDS]
+            _colors2 = ["#C9D7C1", "#A7C098", "#86A873"]
+            _bars2 = _ax2.bar(_labels2, _values2, color=_colors2, edgecolor="#4F6B44")
+            _ax2.set_ylim(0, 1.05)
+            _ax2.set_ylabel("Probability", color="#2F4858", fontsize=9)
+            _ax2.grid(axis="y", color="#E3E8EE", linewidth=0.6)
+            for _s in _ax2.spines.values():
+                _s.set_color("#CBD2D9")
+            for _bar, _v in zip(_bars2, _values2):
+                _ax2.text(_bar.get_x() + _bar.get_width() / 2, _v + 0.03,
+                          f"{_v:.0%}", ha="center", fontsize=9, color="#2F4858")
+            _fig2.tight_layout()
+            st.pyplot(_fig2, use_container_width=True)
 
     with right:
         with st.container(border=True):
@@ -939,11 +971,17 @@ def page_teacher() -> None:
     correct = st.session_state["correct_attempts"]
     acc = (correct / total * 100.0) if total else 0.0
 
+    try:
+        _tracker_t = get_bkt_tracker()
+        _bkt_overall_t = _tracker_t.overall_readiness_score(threshold=0.75)
+    except Exception:
+        _bkt_overall_t = 0.0
+
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Attempts", total)
     c2.metric("Accuracy", f"{acc:.0f}%")
     c3.metric("Hints used", st.session_state["hint_count"])
-    c4.metric("Mastery", st.session_state["mastery_prediction"].title())
+    c4.metric("BKT readiness", f"{_bkt_overall_t:.0%}")
 
     st.write("")
 
