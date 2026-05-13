@@ -464,7 +464,7 @@ def progress_strip() -> None:
     c1.metric("Attempts", total)
     c2.metric("Correct", correct)
     c3.metric("Accuracy", f"{acc:.0f}%")
-    c4.metric("BKT readiness", f"{bkt_overall:.0%}")
+    c4.metric("Mastery", f"{bkt_overall:.0%}")
 
     # Animated bar driven by BKT overall readiness (proportion of topics
     # where P(mastered) >= 0.75). This is the headline progress signal.
@@ -475,7 +475,7 @@ def progress_strip() -> None:
           <div class="mastery-bar-fill" style="width:{bar_pct}%"></div>
         </div>
         <p style="text-align:right;font-size:0.78rem;color:#6B7280;margin:2px 0 0;">
-          EQAO readiness (Bayesian Knowledge Tracing)
+          Linear equations mastery (Bayesian Knowledge Tracing)
         </p>
         """,
         unsafe_allow_html=True,
@@ -536,12 +536,12 @@ def page_home() -> None:
                     _cols[_i].metric(
                         f"{_emoji} {_title}",
                         f"{_p:.0%}",
-                        "EQAO ready" if _ready else "keep practicing",
+                        "mastered" if _ready else "keep practicing",
                         delta_color="normal" if _ready else "off",
                     )
                 st.progress(
                     min(max(_overall_home, 0.0), 1.0),
-                    text=f"Overall EQAO readiness: {_overall_home:.0%}",
+                    text=f"Overall linear equations mastery: {_overall_home:.0%}",
                 )
         except Exception:
             pass
@@ -566,14 +566,14 @@ def page_home() -> None:
                 "**Bayesian Knowledge Tracing (BKT)** is the primary mastery model. It maintains a "
                 "hidden-state P(mastered) per topic and updates it after every attempt using the "
                 "observed correctness, slip probability, and guess probability — the same family of "
-                "models used by Carnegie Mellon's Cognitive Tutor. A topic counts as **EQAO-ready** "
-                "once P(mastered) ≥ 0.75, mirroring the Ontario provincial standard."
+                "models used by Carnegie Mellon's Cognitive Tutor. A topic counts as **mastered** "
+                "once P(mastered) ≥ 0.75, matching the Ontario Level 3 (provincial standard) threshold."
             )
             with st.expander("Random Forest classifier (warm-start · advanced)"):
                 st.caption(
                     "A scikit-learn **Random Forest** (supervised, not reinforcement learning) trained "
                     "on 13 behavioral features — recent accuracy, streaks, normalized response latency, "
-                    "hint utilization, and temporal trajectory — classifies you into Ontario EQAO "
+                    "hint utilization, and temporal trajectory — classifies you into Ontario achievement "
                     "levels 1–4. Its probability output seeds the BKT prior so BKT doesn't have to "
                     "start cold. Adaptive next-step suggestions are separate rule-based logic on top."
                 )
@@ -843,11 +843,11 @@ def page_dashboard() -> None:
             st.caption(
                 "Bayesian Knowledge Tracing maintains a hidden-state P(mastered) per topic. "
                 "It updates after every attempt using observed correctness plus slip/guess "
-                "probabilities calibrated for Grade 9 EQAO content."
+                "probabilities calibrated for Grade 9 linear equations content."
             )
             if _tracker is not None and _readiness:
                 st.metric(
-                    "Overall EQAO readiness",
+                    "Overall linear equations mastery",
                     f"{_overall:.0%}",
                     f"{sum(_readiness.values())}/{len(_readiness)} topics mastered",
                 )
@@ -862,7 +862,7 @@ def page_dashboard() -> None:
                                for p in _topic_pmast]
                 _fig, _ax = _plt.subplots(figsize=(5.6, 3.0), dpi=120)
                 _bars = _ax.barh(_topic_names, _topic_pmast, color=_bar_colors, edgecolor="#4F6B44")
-                _ax.axvline(0.75, color="#E76F51", linestyle="--", linewidth=1, label="EQAO ready (0.75)")
+                _ax.axvline(0.75, color="#E76F51", linestyle="--", linewidth=1, label="Mastery threshold (0.75)")
                 _ax.set_xlim(0, 1.0)
                 _ax.set_xlabel("P(mastered)", color="#2F4858", fontsize=9)
                 _ax.invert_yaxis()
@@ -981,7 +981,7 @@ def page_teacher() -> None:
     c1.metric("Attempts", total)
     c2.metric("Accuracy", f"{acc:.0f}%")
     c3.metric("Hints used", st.session_state["hint_count"])
-    c4.metric("BKT readiness", f"{_bkt_overall_t:.0%}")
+    c4.metric("Mastery", f"{_bkt_overall_t:.0%}")
 
     st.write("")
 
