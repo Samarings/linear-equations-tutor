@@ -193,6 +193,7 @@ DEFAULT_ROW: Dict[str, Any] = {
     "response_times": [],
     "mastery_prediction": "low",
     "mastery_probs": {"low": 1.0, "medium": 0.0, "high": 0.0},
+    "bkt_state": "",
 }
 
 
@@ -233,9 +234,16 @@ def save_progress(user_id: str, state: Dict[str, Any]) -> bool:
         "response_times": [float(t) for t in state.get("response_times", [])],
         "mastery_prediction": str(state.get("mastery_prediction", "low")),
         "mastery_probs": state.get("mastery_probs", {"low": 1.0, "medium": 0.0, "high": 0.0}),
+        "bkt_state": str(state.get("bkt_state", "") or ""),
     }
     try:
         client.table(TABLE).upsert(payload, on_conflict="user_id").execute()
         return True
     except Exception:
-        return False
+        # Retry without bkt_state in case the column hasn't been added to the table yet.
+        try:
+            payload.pop("bkt_state", None)
+            client.table(TABLE).upsert(payload, on_conflict="user_id").execute()
+            return True
+        except Exception:
+            return False

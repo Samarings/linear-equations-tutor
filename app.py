@@ -52,9 +52,36 @@ from ml_model import (
     recommend_next_action,
     train_mastery_model,
 )
+from bkt import BKTTracker
 from utils import check_answer, get_api_key, perplexity_chat, plot_line, plot_system
 from custom_css import CUSTOM_CSS
 from sounds import play_correct, play_wrong, play_hint, play_click, play_new_problem
+
+
+# ---------------------------------------------------------------------------
+# EQAO (level_1..level_4) → friendly (low/medium/high) adapter
+# Keeps the existing UI, CSS, and Supabase schema unchanged while the new
+# MasteryPipeline outputs the Ontario EQAO 4-level rubric internally.
+# ---------------------------------------------------------------------------
+EQAO_TO_FRIENDLY: Dict[str, str] = {
+    "level_1": "low",
+    "level_2": "low",
+    "level_3": "medium",
+    "level_4": "high",
+}
+
+# Friendly bands for the dashboard probability bars
+FRIENDLY_BANDS = ["low", "medium", "high"]
+
+
+def eqao_probs_to_friendly(probs: Dict[str, float]) -> Dict[str, float]:
+    """Aggregate level_1..level_4 probabilities into low/medium/high buckets."""
+    out = {b: 0.0 for b in FRIENDLY_BANDS}
+    for lvl, p in probs.items():
+        band = EQAO_TO_FRIENDLY.get(lvl)
+        if band:
+            out[band] += float(p)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -90,8 +117,10 @@ DEFAULT_STATE: Dict[str, Any] = {
     "hint_count": 0,                  # total hints across session
     "response_times": [],             # seconds per attempt
     "recent_correctness": 0.0,        # cached fraction over last N
-    "mastery_prediction": "low",      # label
-    "mastery_probs": {"low": 1.0, "medium": 0.0, "high": 0.0},
+    "mastery_prediction": "low",      # friendly label (low/medium/high) shown in UI
+    "mastery_probs": {"low": 1.0, "medium": 0.0, "high": 0.0},  # friendly aggregated
+    "mastery_probs_eqao": {"level_1": 1.0, "level_2": 0.0, "level_3": 0.0, "level_4": 0.0},
+    "bkt_state": "",                  # JSON-serialised BKTTracker state
     "recommended_next_action": "Try a couple of easy warm-up problems to get started.",
     "answer_input_key": 0,            # used to reset the answer input widget
     "free_response_answer": "",       # last free-response tutor reply
@@ -121,6 +150,7 @@ PERSIST_KEYS = (
     "response_times",
     "mastery_prediction",
     "mastery_probs",
+    "bkt_state",
 )
 
 
@@ -140,6 +170,15 @@ def hydrate_from_cloud() -> None:
     for k in PERSIST_KEYS:
         if k in row:
             st.session_state[k] = row[k]
+    # Rehydrate the in-memory BKT tracker from the JSON blob, if present.
+    bkt_json = st.session_state.get("bkt_state") or ""
+    try:
+        if bkt_json:
+            st.session_state["_bkt_tracker"] = BKTTracker.from_json(bkt_json)
+        else:
+            st.session_state["_bkt_tracker"] = BKTTracker()
+    except Exception:
+        st.session_state["_bkt_tracker"] = BKTTracker()
     st.session_state["_hydrated"] = True
 
 
@@ -238,17 +277,42 @@ MODEL = load_model()
 # Helper functions
 # ---------------------------------------------------------------------------
 
+def get_bkt_tracker() -> BKTTracker:
+    """Lazy accessor; rebuilds from JSON if missing (e.g. after a reset)."""
+    tr = st.session_state.get("_bkt_tracker")
+    if isinstance(tr, BKTTracker):
+        return tr
+    blob = st.session_state.get("bkt_state") or ""
+    try:
+        tr = BKTTracker.from_json(blob) if blob else BKTTracker()
+    except Exception:
+        tr = BKTTracker()
+    st.session_state["_bkt_tracker"] = tr
+    return tr
+
+
 def refresh_mastery() -> None:
     feats = compute_features(
         st.session_state["attempt_history"],
         st.session_state["hint_count"],
         st.session_state["response_times"],
     )
-    label, probs = MODEL.predict(feats)
+    eqao_label, eqao_probs = MODEL.predict(feats)  # e.g. "level_3", {level_1..level_4: p}
+    friendly_label = EQAO_TO_FRIENDLY.get(eqao_label, "low")
+    friendly_probs = eqao_probs_to_friendly(eqao_probs)
+
     st.session_state["recent_correctness"] = feats["recent_correctness"]
-    st.session_state["mastery_prediction"] = label
-    st.session_state["mastery_probs"] = probs
-    st.session_state["recommended_next_action"] = recommend_next_action(label, feats)
+    st.session_state["mastery_prediction"] = friendly_label
+    st.session_state["mastery_probs"] = friendly_probs
+    st.session_state["mastery_probs_eqao"] = eqao_probs
+
+    # Warm-start BKT priors from the RF output (once per topic per session).
+    tracker = get_bkt_tracker()
+    current_topic = st.session_state.get("current_topic") or "slope"
+    tracker.warm_start_from_rf(current_topic, eqao_probs)
+    st.session_state["bkt_state"] = tracker.to_json()
+
+    st.session_state["recommended_next_action"] = recommend_next_action(eqao_label, feats)
 
 
 def new_problem(topic: str, difficulty: str) -> None:
@@ -284,6 +348,10 @@ def record_attempt(correct: bool) -> None:
     else:
         st.session_state["incorrect_attempts"] += 1
     refresh_mastery()
+    # BKT hidden-Markov update for this topic (RF warm-start happens in refresh_mastery).
+    tracker = get_bkt_tracker()
+    tracker.update(topic, bool(correct))
+    st.session_state["bkt_state"] = tracker.to_json()
     sync_to_cloud()
 
 
@@ -306,6 +374,9 @@ def reset_session() -> None:
     for k, v in DEFAULT_STATE.items():
         st.session_state[k] = v
     st.session_state["answer_input_key"] += 1
+    # Fresh BKT tracker on reset
+    st.session_state["_bkt_tracker"] = BKTTracker()
+    st.session_state["bkt_state"] = st.session_state["_bkt_tracker"].to_json()
     for k, v in keep.items():
         st.session_state[k] = v
     sync_to_cloud()  # persist the reset so it sticks across devices
@@ -720,8 +791,8 @@ def page_dashboard() -> None:
             # Render the probability bars in pedagogical order (Low → Medium → High).
             import matplotlib.pyplot as _plt  # local import keeps top clean
             _fig, _ax = _plt.subplots(figsize=(5.2, 2.6), dpi=120)
-            _labels = [c.title() for c in CLASS_LABELS]
-            _values = [probs.get(c, 0.0) for c in CLASS_LABELS]
+            _labels = [c.title() for c in FRIENDLY_BANDS]
+            _values = [probs.get(c, 0.0) for c in FRIENDLY_BANDS]
             _colors = ["#C9D7C1", "#A7C098", "#86A873"]
             _bars = _ax.bar(_labels, _values, color=_colors, edgecolor="#4F6B44")
             _ax.set_ylim(0, 1.05)
@@ -742,6 +813,32 @@ def page_dashboard() -> None:
         with st.container(border=True):
             st.subheader("Next action")
             st.info(st.session_state["recommended_next_action"], icon="🧭")
+
+        # Bayesian Knowledge Tracing per-topic readiness
+        try:
+            _tracker = get_bkt_tracker()
+            _readiness = _tracker.eqao_readiness(threshold=0.75)
+            _bkt_rows = []
+            for _topic_key, _ready in _readiness.items():
+                _p = _tracker.p_mastered(_topic_key)
+                _bkt_rows.append({
+                    "Topic": TOPICS.get(_topic_key, {}).get("title", _topic_key),
+                    "P(mastered)": f"{_p:.0%}",
+                    "EQAO ready": "✅" if _ready else "⏳",
+                })
+            if _bkt_rows:
+                with st.container(border=True):
+                    st.subheader("BKT mastery by topic")
+                    st.caption(
+                        "Bayesian Knowledge Tracing keeps a hidden-state estimate of mastery per topic, "
+                        "warm-started from the Random Forest and updated after every attempt."
+                    )
+                    st.dataframe(pd.DataFrame(_bkt_rows), use_container_width=True, hide_index=True)
+                    _overall = _tracker.overall_readiness_score(threshold=0.75)
+                    st.progress(min(max(_overall, 0.0), 1.0),
+                                text=f"Overall EQAO readiness: {_overall:.0%}")
+        except Exception:
+            pass
 
     with right:
         with st.container(border=True):
